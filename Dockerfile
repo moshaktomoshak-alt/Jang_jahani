@@ -28,6 +28,7 @@ ENV HUSKY=0
 ENV NPM_CONFIG_IGNORE_SCRIPTS=1
 COPY package*.json ./
 RUN npm ci --omit=dev
+
 # Final production image
 FROM base
 
@@ -49,7 +50,7 @@ COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # Copy Nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-RUN rm -f /etc/nginx/sites-enabled/default
+RUN rm -rf /etc/nginx/sites-enabled /etc/nginx/sites-available
 
 # Script that generates the create-game worker upstream at container start.
 COPY generate-nginx-upstream.sh /usr/local/bin/generate-nginx-upstream.sh
