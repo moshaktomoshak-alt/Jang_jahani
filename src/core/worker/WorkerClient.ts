@@ -14,14 +14,11 @@ import { ClientID, GameStartInfo, Turn } from "../Schemas";
 import { generateID } from "../Util";
 import { WorkerMessage } from "./WorkerMessages";
 
-// Inlined as a same-origin Blob (Vite's `?worker&inline`), sidestepping the
-// cross-origin `new Worker(url)` restriction that would otherwise apply when
-// the worker bundle is served from the CDN. The dynamic import keeps the
-// ~700 KB base64 payload in its own chunk, fetched when a game starts,
-// instead of inside the main bundle.
+// A normal same-origin worker chunk (not `&inline`). The inline/data-URI
+// variant has no resolvable base URL, which breaks any relative fetch()
+// calls made from inside the worker (e.g. loading map files).
 async function createGameWorker(): Promise<Worker> {
-  const { default: GameWorker } =
-    await import("./Worker.worker.ts?worker&inline");
+  const { default: GameWorker } = await import("./Worker.worker.ts?worker");
   return new GameWorker();
 }
 
