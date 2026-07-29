@@ -81,6 +81,24 @@ export class WorkerClient {
     return new Promise((resolve, reject) => {
       const messageId = generateID();
 
+      // DEBUG: surface the real underlying error immediately instead of
+      // silently waiting for the 60s timeout below.
+      worker.addEventListener("error", (err) => {
+        console.error(
+          "Worker error:",
+          err.message,
+          "file:",
+          err.filename,
+          "line:",
+          err.lineno,
+        );
+        reject(
+          new Error(
+            `Worker crashed during init: ${err.message} (${err.filename}:${err.lineno})`,
+          ),
+        );
+      });
+
       this.messageHandlers.set(messageId, (message) => {
         if (message.type === "initialized") {
           this.isInitialized = true;
