@@ -18,6 +18,12 @@ const ctx: Worker = self as any;
 globalThis.__ASSET_MANIFEST__ = __ASSET_MANIFEST__;
 let gameRunner: Promise<GameRunner> | null = null;
 const mapLoader = new FetchGameMapLoader((path) => assetUrl(`maps/${path}`));
+
+// DEBUG: forward log messages to the main thread so they show up in Eruda,
+// since a Worker's own console isn't visible there.
+function debugLog(msg: string) {
+  ctx.postMessage({ type: "worker_debug", msg } as any);
+}
 // Yield threshold; not a backlog cap. Used to avoid monopolizing the worker task
 // and flooding the main thread with messages during catch-up.
 const MAX_TICKS_BEFORE_YIELD = 4;
@@ -140,23 +146,41 @@ ctx.addEventListener("message", async (e: MessageEvent<MainThreadMessage>) => {
   switch (message.type) {
     case "init":
       try {
+        debugLog("init: start");
         // Set before createGameRunner so map fetches via mapLoader pick up the
         // CDN base. Workers have no `window`, so AssetUrls falls back to this.
         globalThis.__CDN_BASE__ = message.cdnBase;
+        debugLog("init: cdn base set, calling createGameRunner");
         gameRunner = createGameRunner(
           message.gameStartInfo,
           message.clientID,
           mapLoader,
           gameUpdate,
-        ).then((gr) => {
-          sendMessage({
-            type: "initialized",
-            id: message.id,
-          } as InitializedMessage);
-          return gr;
-        });
+        )
+          .then((gr) => {
+            debugLog("init: createGameRunner resolved successfully");
+            sendMessage({
+              type: "initialized",
+              id: message.id,
+            } as InitializedMessage);
+            return gr;
+          })
+          .catch((err) => {
+            debugLog(
+              "init: createGameRunner REJECTED: " +
+                (err && err.message ? err.message : String(err)),
+            );
+            throw err;
+          });
+        debugLog("init: gameRunner promise created, awaiting resolution");
       } catch (error) {
         console.error("Failed to initialize game runner:", error);
+        debugLog(
+          "init: SYNC THROW: " +
+            (error && (error as any).message
+              ? (error as any).message
+              : String(error)),
+        );
         throw error;
       }
       break;
