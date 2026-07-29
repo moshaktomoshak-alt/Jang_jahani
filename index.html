@@ -475,6 +475,87 @@
       data-cf-beacon='{"token": "03d93e6fefb349c28ee69b408fa25a13"}'
     ></script>
     <script type="module" src="/src/client/Main.ts"></script>
+
+    <!-- FPS TOGGLE BUTTON + COUNTER -->
+    <div
+      id="fps-toggle-btn"
+      style="
+        position: fixed;
+        bottom: 12px;
+        left: 12px;
+        z-index: 999999;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.55);
+        color: #fff;
+        font-family: monospace;
+        font-size: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        user-select: none;
+        -webkit-user-select: none;
+      "
+    >
+      FPS
+    </div>
+    <div
+      id="fps-counter"
+      style="
+        position: fixed;
+        bottom: 58px;
+        left: 12px;
+        z-index: 999999;
+        background: rgba(0, 0, 0, 0.55);
+        color: #0f0;
+        font-family: monospace;
+        font-size: 14px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        display: none;
+        pointer-events: none;
+      "
+    >
+      0 FPS
+    </div>
+    <script>
+      (function () {
+        var btn = document.getElementById("fps-toggle-btn");
+        var counter = document.getElementById("fps-counter");
+        var visible = false;
+        var frames = 0;
+        var lastTime = performance.now();
+        var rafId = null;
+
+        function loop() {
+          frames++;
+          var now = performance.now();
+          var delta = now - lastTime;
+          if (delta >= 500) {
+            var fps = Math.round((frames * 1000) / delta);
+            counter.textContent = fps + " FPS";
+            frames = 0;
+            lastTime = now;
+          }
+          rafId = requestAnimationFrame(loop);
+        }
+
+        btn.addEventListener("click", function () {
+          visible = !visible;
+          counter.style.display = visible ? "block" : "none";
+          if (visible && rafId === null) {
+            frames = 0;
+            lastTime = performance.now();
+            loop();
+          } else if (!visible && rafId !== null) {
+            cancelAnimationFrame(rafId);
+            rafId = null;
+          }
+        });
+      })();
+    </script>
+
     <footer>
       <script
         data-cfasync="false"
