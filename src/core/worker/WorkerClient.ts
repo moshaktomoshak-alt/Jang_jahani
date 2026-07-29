@@ -44,6 +44,10 @@ export class WorkerClient {
     const message = event.data;
 
     switch (message.type) {
+      // DEBUG: log forwarded from inside the Worker.
+      case "worker_debug" as any:
+        console.log("[Worker]", (message as any).msg);
+        break;
       case "game_update":
         if (this.gameUpdateCallback && message.gameUpdate) {
           this.gameUpdateCallback(message.gameUpdate);
