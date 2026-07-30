@@ -41,6 +41,59 @@ const SPEED_ORDER: ReplaySpeedMultiplier[] = [
 // build a small backlog so MAX can catch up.
 const MAX_REPLAY_BACKLOG_TURNS = 60;
 
+export const AUTOSAVE_KEY = "jangjahani_autosave_v1";
+
+export interface AutosavePayload {
+  gameStartInfo: LobbyConfig["gameStartInfo"];
+  playerName: string | undefined;
+  playerClanTag: string | null | undefined;
+  turns: Turn[];
+  savedAt: number;
+}
+
+// JSON.stringify/parse pair that safely round-trips bigint values (used for
+// gold amounts), tagging them so they can be restored exactly.
+function autosaveStringify(value: unknown): string {
+  return JSON.stringify(value, (_key, val) =>
+    typeof val === "bigint" ? { __bigint__: val.toString() } : val,
+  );
+}
+
+function autosaveParse<T>(text: string): T {
+  return JSON.parse(text, (_key, val) => {
+    if (
+      val &&
+      typeof val === "object" &&
+      typeof (val as { __bigint__?: string }).__bigint__ === "string"
+    ) {
+      return BigInt((val as { __bigint__: string }).__bigint__);
+    }
+    return val;
+  }) as T;
+}
+
+// Returns the saved autosave, or null if none exists / it's corrupt.
+export function loadAutosave(): AutosavePayload | null {
+  try {
+    const raw = localStorage.getItem(AUTOSAVE_KEY);
+    if (!raw) return null;
+    const parsed = autosaveParse<AutosavePayload>(raw);
+    if (!parsed?.gameStartInfo || !Array.isArray(parsed.turns)) return null;
+    return parsed;
+  } catch (e) {
+    console.warn("Failed to read autosave:", e);
+    return null;
+  }
+}
+
+export function clearAutosave() {
+  try {
+    localStorage.removeItem(AUTOSAVE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 export class LocalServer {
   // All turns from the game record on replay.
   private replayTurns: Turn[] = [];
@@ -51,6 +104,7 @@ export class LocalServer {
   private startedAt: number;
 
   private paused = false;
+  private resuming = false;
   private replaySpeedMultiplier = defaultReplaySpeedMultiplier;
 
   private clientID: ClientID | undefined;
@@ -132,6 +186,10 @@ export class LocalServer {
         this.lobbyConfig.gameRecord,
       ).turns;
     }
+    if (this.lobbyConfig.resumeTurns && this.lobbyConfig.resumeTurns.length > 0) {
+      this.replayTurns = this.lobbyConfig.resumeTurns;
+      this.resuming = true;
+    }
     if (this.lobbyConfig.gameStartInfo === undefined) {
       throw new Error("missing gameStartInfo");
     }
@@ -182,8 +240,9 @@ export class LocalServer {
         }
         return;
       }
-      // Don't process non-pause intents during replays or while paused
-      if (this.lobbyConfig.gameRecord || this.paused) {
+      // Don't process non-pause intents during replays or while paused, or
+      // while still catching up on a resumed autosave's turn backlog.
+      if (this.replayTurns.length > 0 || this.paused) {
         return;
       }
 
@@ -245,10 +304,16 @@ export class LocalServer {
     }
     if (this.replayTurns.length > 0) {
       if (this.turns.length >= this.replayTurns.length) {
-        this.endGame();
-        return;
+        if (this.resuming) {
+          // Caught up to the autosaved point — hand off to live play.
+          this.replayTurns = [];
+        } else {
+          this.endGame();
+          return;
+        }
+      } else {
+        this.intents = this.replayTurns[this.turns.length].intents;
       }
-      this.intents = this.replayTurns[this.turns.length].intents;
     }
     const pastTurn: Turn = {
       turnNumber: this.turns.length,
@@ -260,6 +325,27 @@ export class LocalServer {
       type: "turn",
       turn: pastTurn,
     });
+    // Autosave every ~50 turns (~5s), but never while watching an archived
+    // replay — only for a real (possibly resumed) singleplayer session.
+    if (this.lobbyConfig.gameRecord === undefined && this.turns.length % 50 === 0) {
+      this.saveAutosave();
+    }
+  }
+
+  private saveAutosave() {
+    if (this.lobbyConfig.gameStartInfo === undefined) return;
+    try {
+      const payload = {
+        gameStartInfo: this.lobbyConfig.gameStartInfo,
+        playerName: this.lobbyConfig.playerName,
+        playerClanTag: this.lobbyConfig.playerClanTag,
+        turns: this.turns,
+        savedAt: Date.now(),
+      };
+      localStorage.setItem(AUTOSAVE_KEY, autosaveStringify(payload));
+    } catch (e) {
+      console.warn("Autosave failed:", e);
+    }
   }
 
   public endGame() {
@@ -267,6 +353,11 @@ export class LocalServer {
     clearInterval(this.turnCheckInterval);
     if (this.isReplay) {
       return;
+    }
+    try {
+      localStorage.removeItem(AUTOSAVE_KEY);
+    } catch {
+      // ignore
     }
     const players: PlayerRecord[] = [
       {
