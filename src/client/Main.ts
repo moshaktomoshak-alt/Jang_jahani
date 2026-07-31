@@ -9,7 +9,6 @@ import {
   GameRecord,
   GameStartInfo,
   PublicGameInfo,
-  Turn,
 } from "../core/Schemas";
 import { GameEnv } from "../core/configuration/Config";
 import { GameType } from "../core/game/Game";
@@ -257,8 +256,6 @@ export interface JoinLobbyEvent {
   gameStartInfo?: GameStartInfo;
   // GameRecord exists when replaying an archived game.
   gameRecord?: GameRecord;
-  // resumeTurns exists when continuing a locally autosaved singleplayer game.
-  resumeTurns?: Turn[];
   source?: "public" | "private" | "host" | "matchmaking" | "singleplayer";
   publicLobbyInfo?: GameInfo | PublicGameInfo;
 }
@@ -960,7 +957,6 @@ class Client {
       playerRole,
       gameStartInfo: lobby.gameStartInfo ?? lobby.gameRecord?.info,
       gameRecord: lobby.gameRecord,
-      resumeTurns: lobby.resumeTurns,
     });
 
     if (this.mostRecentJoinEvent !== event.timeStamp) {

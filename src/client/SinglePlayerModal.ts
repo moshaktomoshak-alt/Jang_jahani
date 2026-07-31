@@ -26,7 +26,6 @@ import { modalHeader } from "./components/ui/ModalHeader";
 import { getPlayerCosmetics } from "./Cosmetics";
 import { crazyGamesSDK } from "./CrazyGamesSDK";
 import { JoinLobbyEvent } from "./Main";
-import { AutosavePayload, clearAutosave, loadAutosave } from "./LocalServer";
 import { UsernameInput } from "./UsernameInput";
 import {
   getBotsForCompactMap,
@@ -157,9 +156,6 @@ export class SinglePlayerModal extends BaseModal {
 
   private mapLoader = terrainMapFileLoader;
 
-  @state() private hasAutosave: boolean = false;
-  private autosavePayload: AutosavePayload | null = null;
-
   connectedCallback() {
     super.connectedCallback();
     document.addEventListener(
@@ -167,8 +163,6 @@ export class SinglePlayerModal extends BaseModal {
       this.handleUserMeResponse as EventListener,
     );
     void this.loadNationCount();
-    this.autosavePayload = loadAutosave();
-    this.hasAutosave = this.autosavePayload !== null;
   }
 
   disconnectedCallback() {
@@ -505,18 +499,8 @@ export class SinglePlayerModal extends BaseModal {
                 ${translateText("single_modal.options_changed_no_achievements")}
               </div>`
             : null}
-          ${this.hasAutosave
-            ? html`<o-button
-                variant="primary"
-                width="block"
-                size="lg"
-                class="mb-2"
-                @click=${this.continueGame}
-                >Continue previous game</o-button
-              >`
-            : null}
           <o-button
-            variant="${this.hasAutosave ? "secondary" : "primary"}"
+            variant="primary"
             width="block"
             size="lg"
             translationKey="single_modal.start"
@@ -814,26 +798,7 @@ export class SinglePlayerModal extends BaseModal {
     this.teamCount = value;
   }
 
-  private async continueGame() {
-    if (!this.autosavePayload) return;
-    const saved = this.autosavePayload;
-    this.dispatchEvent(
-      new CustomEvent("join-lobby", {
-        detail: {
-          gameID: saved.gameStartInfo!.gameID,
-          gameStartInfo: saved.gameStartInfo,
-          resumeTurns: saved.turns,
-          source: "singleplayer",
-        } satisfies JoinLobbyEvent,
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    this.close();
-  }
-
   private async startGame() {
-    clearAutosave();
     // Validate and clamp maxTimer setting before starting
     let finalMaxTimerValue: number | undefined = undefined;
     if (this.maxTimer) {
